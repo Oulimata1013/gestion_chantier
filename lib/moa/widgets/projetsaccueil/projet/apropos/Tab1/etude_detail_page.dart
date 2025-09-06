@@ -5,10 +5,9 @@ import 'package:gestion_chantier/moa/bloc/study_comments/study_comments_event.da
     as comment_events;
 import 'package:gestion_chantier/moa/bloc/study_comments/study_comments_state.dart'
     as comment_states;
-import 'package:gestion_chantier/moa/bloc/home/home_bloc.dart';
-import 'package:gestion_chantier/moa/bloc/home/home_state.dart';
 import 'package:gestion_chantier/moa/models/Study.dart';
 import 'package:gestion_chantier/moa/repository/study_comment_repository.dart';
+import 'package:gestion_chantier/moa/services/UserService.dart';
 import 'package:gestion_chantier/moa/widgets/study_comment_form.dart';
 import 'package:gestion_chantier/moa/widgets/study_comments_list.dart';
 
@@ -437,63 +436,93 @@ String _formatDateLong(DateTime d) {
 }
 
 /// Section des commentaires
-class _CommentsSection extends StatelessWidget {
+class _CommentsSection extends StatefulWidget {
   const _CommentsSection({required this.studyId});
   final String studyId;
 
   @override
+  State<_CommentsSection> createState() => _CommentsSectionState();
+}
+
+class _CommentsSectionState extends State<_CommentsSection> {
+  int? _userId;
+
+  @override
+  void initState() {
+    super.initState();
+    _getUserId();
+  }
+
+  void _getUserId() async {
+    try {
+      final userId = await UserService.getCurrentUserId();
+      if (mounted) {
+        setState(() {
+          _userId = userId ?? 36; // Valeur par défaut si pas d'ID trouvé
+        });
+      }
+    } catch (e) {
+      print('Erreur lors de la récupération de l\'ID utilisateur: $e');
+      if (mounted) {
+        setState(() {
+          _userId = 36; // Valeur par défaut en cas d'erreur
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return BlocBuilder<HomeBloc, HomeState>(
-      builder: (context, homeState) {
-        if (homeState.currentUser == null) {
-          return const SizedBox.shrink();
-        }
+    if (_userId == null) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
-        final userId = homeState.currentUser!.id;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Titre avec compteur
+          BlocBuilder<StudyCommentsBloc, comment_states.StudyCommentsState>(
+            builder: (context, state) {
+              int commentCount = 0;
+              if (state is comment_states.StudyCommentsLoaded) {
+                commentCount = state.comments.length;
+              } else if (state is comment_states.StudyCommentAdded) {
+                commentCount = state.comments.length;
+              } else if (state is comment_states.StudyCommentAddError) {
+                commentCount = state.comments.length;
+              }
 
-        return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Titre avec compteur
-              BlocBuilder<StudyCommentsBloc, comment_states.StudyCommentsState>(
-                builder: (context, state) {
-                  int commentCount = 0;
-                  if (state is comment_states.StudyCommentsLoaded) {
-                    commentCount = state.comments.length;
-                  } else if (state is comment_states.StudyCommentAdded) {
-                    commentCount = state.comments.length;
-                  } else if (state is comment_states.StudyCommentAddError) {
-                    commentCount = state.comments.length;
-                  }
-
-                  return Text(
-                    'Commentaires($commentCount)',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFF2C3E50),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              // Formulaire de commentaire
-              StudyCommentForm(
-                studyRequestId: int.parse(studyId),
-                userId: userId,
-              ),
-              const SizedBox(height: 16),
-
-              // Liste des commentaires
-              StudyCommentsList(studyRequestId: int.parse(studyId)),
-              const SizedBox(height: 20),
-            ],
+              return Text(
+                'Commentaires($commentCount)',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF2C3E50),
+                ),
+              );
+            },
           ),
-        );
-      },
+          const SizedBox(height: 16),
+
+          // Formulaire de commentaire
+          StudyCommentForm(
+            studyRequestId: int.parse(widget.studyId),
+            userId: _userId!,
+          ),
+          const SizedBox(height: 16),
+
+          // Liste des commentaires
+          StudyCommentsList(studyRequestId: int.parse(widget.studyId)),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 }
