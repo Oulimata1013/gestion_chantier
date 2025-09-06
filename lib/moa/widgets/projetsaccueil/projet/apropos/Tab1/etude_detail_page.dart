@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:gestion_chantier/moa/bloc/study_requests/study_requests_bloc.dart';
-import 'package:gestion_chantier/moa/bloc/study_requests/study_requests_event.dart';
-import 'package:gestion_chantier/moa/bloc/study_requests/study_requests_state.dart';
+import 'package:gestion_chantier/moa/bloc/study_comments/study_comments_bloc.dart';
+import 'package:gestion_chantier/moa/bloc/study_comments/study_comments_event.dart'
+    as comment_events;
+import 'package:gestion_chantier/moa/bloc/study_comments/study_comments_state.dart'
+    as comment_states;
+import 'package:gestion_chantier/moa/bloc/home/home_bloc.dart';
+import 'package:gestion_chantier/moa/bloc/home/home_state.dart';
 import 'package:gestion_chantier/moa/models/Study.dart';
-import 'package:gestion_chantier/moa/models/study_comment.dart';
+import 'package:gestion_chantier/moa/repository/study_comment_repository.dart';
+import 'package:gestion_chantier/moa/widgets/study_comment_form.dart';
+import 'package:gestion_chantier/moa/widgets/study_comments_list.dart';
 
 /// Page de détails d'une étude BET
 class EtudeDetailPage extends StatelessWidget {
@@ -14,39 +20,50 @@ class EtudeDetailPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF2C3E50),
-        foregroundColor: Colors.white,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(
-          study.title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.w600,
-            fontSize: 18,
+    return BlocProvider(
+      create:
+          (context) => StudyCommentsBloc(repository: StudyCommentRepository())
+            ..add(
+              comment_events.LoadStudyComments(
+                studyRequestId: int.parse(study.id),
+              ),
+            ),
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF6F7FB),
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF2C3E50),
+          foregroundColor: Colors.white,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: Text(
+            study.title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+              fontSize: 18,
+            ),
           ),
         ),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _StudyHeader(study: study),
-            const SizedBox(height: 24),
-            if (study.status == StudyStatus.rejected) ...[
-              _RejectionSection(reason: study.rejectionReason ?? 'Aucun motif spécifié'),
-            ] else ...[
-              _ReportsSection(reports: study.reports),
+        body: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _StudyHeader(study: study),
+              const SizedBox(height: 24),
+              if (study.status == StudyStatus.rejected) ...[
+                _RejectionSection(
+                  reason: study.rejectionReason ?? 'Aucun motif spécifié',
+                ),
+              ] else ...[
+                _ReportsSection(reports: study.reports),
+              ],
+              const SizedBox(height: 24),
+              _CommentsSection(studyId: study.id),
             ],
-            const SizedBox(height: 24),
-            _CommentsSection(studyId: study.id),
-          ],
+          ),
         ),
       ),
     );
@@ -420,274 +437,63 @@ String _formatDateLong(DateTime d) {
 }
 
 /// Section des commentaires
-class _CommentsSection extends StatefulWidget {
+class _CommentsSection extends StatelessWidget {
   const _CommentsSection({required this.studyId});
   final String studyId;
 
   @override
-  State<_CommentsSection> createState() => _CommentsSectionState();
-}
-
-class _CommentsSectionState extends State<_CommentsSection> {
-  final TextEditingController _commentController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    context.read<StudyRequestsBloc>().add(LoadStudyComments(studyRequestId: int.parse(widget.studyId)));
-  }
-
-  void _addComment() {
-    // TODO: Implement add comment logic
-  }
-
-  @override
-  void dispose() {
-    _commentController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          BlocBuilder<StudyRequestsBloc, StudyRequestsState>(
-            builder: (context, state) {
-              if (state is StudyCommentsLoaded) {
-                return Text(
-                  'Commentaires(${state.comments.length})',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2C3E50),
-                  ),
-                );
-              }
-              return const Text(
-                'Commentaires',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF2C3E50),
-                ),
-              );
-            },
-          ),
-          const SizedBox(height: 16),
-          BlocBuilder<StudyRequestsBloc, StudyRequestsState>(
-            builder: (context, state) {
-              if (state is StudyCommentsLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state is StudyRequestsError) {
-                return Center(child: Text(state.message));
-              }
-              if (state is StudyCommentsLoaded) {
-                return ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: state.comments.length,
-                  itemBuilder: (context, index) {
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: _CommentCard(comment: state.comments[index]),
-                    );
-                  },
-                );
-              }
-              return Container();
-            },
-          ),
-          const SizedBox(height: 16),
-          _CommentInput(
-            controller: _commentController,
-            onSubmit: _addComment,
-          ),
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-}
+    return BlocBuilder<HomeBloc, HomeState>(
+      builder: (context, homeState) {
+        if (homeState.currentUser == null) {
+          return const SizedBox.shrink();
+        }
 
-/// Widget pour afficher un commentaire
-class _CommentCard extends StatelessWidget {
-  const _CommentCard({required this.comment});
-  final StudyComment comment;
+        final userId = homeState.currentUser!.id;
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Avatar
-        CircleAvatar(
-          child: Text(comment.authorName.substring(0, 2).toUpperCase()),
-        ),
-        const SizedBox(width: 12),
-        // Contenu du commentaire
-        Expanded(
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    comment.authorName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF1E293B),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    _formatCommentDate(comment.createdAt),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF94A3B8),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFFE2E8F0), width: 1),
-                ),
-                child: Text(
-                  comment.content,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Color(0xFF374151),
-                    height: 1.4,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
+              // Titre avec compteur
+              BlocBuilder<StudyCommentsBloc, comment_states.StudyCommentsState>(
+                builder: (context, state) {
+                  int commentCount = 0;
+                  if (state is comment_states.StudyCommentsLoaded) {
+                    commentCount = state.comments.length;
+                  } else if (state is comment_states.StudyCommentAdded) {
+                    commentCount = state.comments.length;
+                  } else if (state is comment_states.StudyCommentAddError) {
+                    commentCount = state.comments.length;
+                  }
 
-/// Widget pour saisir un nouveau commentaire
-class _CommentInput extends StatelessWidget {
-  const _CommentInput({required this.controller, required this.onSubmit});
-  final TextEditingController controller;
-  final VoidCallback onSubmit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: controller,
-              decoration: const InputDecoration(
-                hintText: 'Ajouter un commentaire...',
-                hintStyle: TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF94A3B8),
-                ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.zero,
-              ),
-              style: const TextStyle(
-                fontSize: 14,
-                color: Color(0xFF374151),
-              ),
-              maxLines: null,
-              textInputAction: TextInputAction.send,
-              onSubmitted: (_) => onSubmit(),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Row(
-            children: [
-              IconButton(
-                onPressed: () {
-                  // TODO: Attach file
+                  return Text(
+                    'Commentaires($commentCount)',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF2C3E50),
+                    ),
+                  );
                 },
-                icon: const Icon(
-                  Icons.attach_file,
-                  size: 20,
-                  color: Color(0xFF94A3B8),
-                ),
-                constraints: const BoxConstraints(
-                  minWidth: 32,
-                  minHeight: 32,
-                ),
-                padding: EdgeInsets.zero,
               ),
-              const SizedBox(width: 4),
-              Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFF5A00),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  onPressed: onSubmit,
-                  icon: const Icon(
-                    Icons.send,
-                    size: 16,
-                    color: Colors.white,
-                  ),
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
-                  ),
-                  padding: EdgeInsets.zero,
-                ),
+              const SizedBox(height: 16),
+
+              // Formulaire de commentaire
+              StudyCommentForm(
+                studyRequestId: int.parse(studyId),
+                userId: userId,
               ),
+              const SizedBox(height: 16),
+
+              // Liste des commentaires
+              StudyCommentsList(studyRequestId: int.parse(studyId)),
+              const SizedBox(height: 20),
             ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
-}
-
-String _formatCommentDate(DateTime date) {
-  const months = [
-    'janv.',
-    'févr.',
-    'mars',
-    'avr.',
-    'mai',
-    'juin',
-    'juil.',
-    'août',
-    'sept.',
-    'oct.',
-    'nov.',
-    'déc.',
-  ];
-  
-  final day = date.day.toString().padLeft(2, '0');
-  final month = months[date.month - 1];
-  final hour = date.hour.toString().padLeft(2, '0');
-  final minute = date.minute.toString().padLeft(2, '0');
-  
-  return '$day $month, $hour:$minute';
 }
